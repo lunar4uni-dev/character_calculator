@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Character Count — Translation Estimate</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', system-ui, sans-serif; }
+    .drop-active { border-color: #6366f1 !important; background-color: #eef2ff !important; }
+    .fade-in { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .table-row:hover td { background-color: #f8fafc; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { opacity: 1; }
+    .lang-btn { transition: all 0.15s ease; }
+    .lang-btn.active { background: #4f46e5; color: #fff; box-shadow: 0 1px 4px rgba(79,70,229,0.35); }
+    .lang-btn:not(.active) { color: #6b7280; }
+    .lang-btn:not(.active):hover { background: #f3f4f6; color: #374151; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 shadow-sm">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h1 class="text-xl font-bold text-gray-900">Character Count — Translation Estimate</h1>
+        <p class="text-sm text-gray-500 mt-0.5">Outsourcing cost report for translation projects</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <label id="price-label" class="text-sm font-medium text-gray-600">Price per character:</label>
+        <div class="flex items-center border border-gray-300 rounded-lg overflow-hidden bg-white shadow-sm">
+          <span class="px-3 py-2 bg-gray-50 text-gray-500 text-sm border-r border-gray-300">₩</span>
+          <input
+            id="price-input"
+            type="number"
+            min="1"
+            value="35"
+            class="w-20 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+          />
+          <span id="price-unit-suffix" class="px-3 py-2 bg-gray-50 text-gray-500 text-sm border-l border-gray-300">/ char</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-6 py-8 space-y-6">
+
+    <!-- Language Selector -->
+    <section>
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Source Language</p>
+      <div class="inline-flex gap-1 bg-white border border-gray-200 rounded-xl p-1 shadow-sm">
+        <button class="lang-btn active px-5 py-2 text-sm font-semibold rounded-lg" data-lang="japanese" onclick="setLang('japanese')">🇯🇵 Japanese</button>
+        <button class="lang-btn px-5 py-2 text-sm font-semibold rounded-lg" data-lang="korean"     onclick="setLang('korean')">🇰🇷 Korean</button>
+        <button class="lang-btn px-5 py-2 text-sm font-semibold rounded-lg" data-lang="vietnamese" onclick="setLang('vietnamese')">🇻🇳 Vietnamese</button>
+        <button class="lang-btn px-5 py-2 text-sm font-semibold rounded-lg" data-lang="english"    onclick="setLang('english')">🇺🇸 English</button>
+      </div>
+    </section>
+
+    <!-- Drop Zone -->
+    <section>
+      <div
+        id="drop-zone"
+        class="border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center cursor-pointer transition-all duration-200 bg-white hover:border-indigo-400 hover:bg-indigo-50"
+        onclick="document.getElementById('file-input').click()"
+      >
+        <div class="flex flex-col items-center gap-3">
+          <div class="w-14 h-14 rounded-full bg-indigo-100 flex items-center justify-center">
+            <svg class="w-7 h-7 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+            </svg>
+          </div>
+          <div>
+            <p class="text-base font-semibold text-gray-700">Drop files here, or click to browse</p>
+            <p class="text-sm text-gray-400 mt-1">Supports <code class="bg-gray-100 px-1 rounded">.md</code> and <code class="bg-gray-100 px-1 rounded">.txt</code> — multiple files allowed</p>
+          </div>
+        </div>
+      </div>
+      <input id="file-input" type="file" accept=".md,.txt" multiple class="hidden" />
+    </section>
+
+    <!-- Results (hidden until files loaded) -->
+    <section id="results-section" class="hidden fade-in space-y-6">
+
+      <!-- Action bar -->
+      <div class="flex items-center justify-between">
+        <h2 class="text-base font-semibold text-gray-700">
+          Results — <span id="file-count" class="text-indigo-600">0</span> file(s)
+        </h2>
+        <div class="flex gap-2">
+          <button
+            onclick="exportCSV()"
+            class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Export CSV
+          </button>
+          <button
+            onclick="clearAll()"
+            class="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 text-sm font-medium rounded-lg border border-gray-300 shadow-sm transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            Clear All
+          </button>
+        </div>
+      </div>
+
+      <!-- Summary cards (rendered dynamically) -->
+      <div id="summary-cards" class="grid grid-cols-2 sm:grid-cols-4 gap-4"></div>
+
+      <!-- Estimate banner -->
+      <div class="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-xl p-5 text-white shadow-md">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-indigo-200">Total Translation Estimate</p>
+            <p id="sum-estimate" class="text-3xl font-bold mt-1">₩0</p>
+          </div>
+          <div class="text-right text-sm text-indigo-200">
+            <p><span id="sum-total-banner">0</span> <span id="banner-unit-label">chars</span></p>
+            <p>× <span id="price-display">35</span> <span id="banner-unit-price">₩/char</span></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead id="table-head"></thead>
+            <tbody id="table-body"></tbody>
+            <tfoot id="table-foot"></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <h3 class="text-sm font-semibold text-gray-600 mb-4">Distribution by File</h3>
+        <div class="relative" style="height: 280px;">
+          <canvas id="bar-chart"></canvas>
+        </div>
+        <div id="chart-legend" class="flex flex-wrap gap-5 justify-center mt-4 text-xs"></div>
+      </div>
+
+    </section>
+  </main>
+
+  <script>
+    // ─── Language Configuration ───────────────────────────────────────────────
+    const LANG_CONFIG = {
+      japanese: {
+        label: 'Japanese', flag: '🇯🇵',
+        unit: 'char', unitLabel: 'chars', priceLabel: 'Price per character:', priceSuffix: '/ char',
+        categories: [
+          { key: 'hiragana', label: 'Hiragana',
+            cardBg: 'bg-blue-50',   cardBorder: 'border-blue-100',  labelColor: 'text-blue-500',  valColor: 'text-blue-700',
+            tagClass: 'bg-blue-100 text-blue-800',   thColor: 'text-blue-600',   footColor: 'text-blue-700',
+            chartColor: 'rgba(96,165,250,0.85)' },
+          { key: 'katakana', label: 'Katakana',
+            cardBg: 'bg-green-50',  cardBorder: 'border-green-100', labelColor: 'text-green-500', valColor: 'text-green-700',
+            tagClass: 'bg-green-100 text-green-800', thColor: 'text-green-600',  footColor: 'text-green-700',
+            chartColor: 'rgba(74,222,128,0.85)' },
+          { key: 'kanji',    label: 'Kanji',
+            cardBg: 'bg-orange-50', cardBorder: 'border-orange-100',labelColor: 'text-orange-500',valColor: 'text-orange-700',
+            tagClass: 'bg-orange-100 text-orange-800',thColor: 'text-orange-600',footColor: 'text-orange-700',
+            chartColor: 'rgba(251,146,60,0.85)' },
+        ],
+        count(text) {
+          let hiragana=0, katakana=0, kanji=0;
+          for (const ch of text) {
+            const cp = ch.codePointAt(0);
+            if      (cp>=0x3040 && cp<=0x309F) hiragana++;
+            else if ((cp>=0x30A0 && cp<=0x30FF)||(cp>=0xFF65 && cp<=0xFF9F)) katakana++;
+            else if ((cp>=0x4E00 && cp<=0x9FFF)||(cp>=0x3400 && cp<=0x4DBF)) kanji++;
+          }
+          return { hiragana, katakana, kanji, total: hiragana+katakana+kanji };
+        },
+        csvHeaders: (cats) => ['file name', ...cats.map(c=>c.label), 'count', 'estimate', 'price(₩) / character'],
+        csvRow:     (name, c, cats, price, fmt) => [name, ...cats.map(cat=>c[cat.key]), c.total, `₩${fmt(c.total*price)}`, ''],
+        csvTotal:   (sums, cats, price, fmt) => ['', ...cats.map(()=>''), 'total', `₩${fmt(sums.total*price)}`, ''],
+      },
+
+      korean: {
+        label: 'Korean', flag: '🇰🇷',
+        unit: 'char', unitLabel: 'chars', priceLabel: 'Price per character:', priceSuffix: '/ char',
+        categories: [
+          { key: 'syllable', label: 'Syllables',
+            cardBg: 'bg-blue-50',   cardBorder: 'border-blue-100',   labelColor: 'text-blue-500',  valColor: 'text-blue-700',
+            tagClass: 'bg-blue-100 text-blue-800',    thColor: 'text-blue-600',   footColor: 'text-blue-700',
+            chartColor: 'rgba(96,165,250,0.85)' },
+          { key: 'jamo',     label: 'Jamo',
+            cardBg: 'bg-purple-50', cardBorder: 'border-purple-100', labelColor: 'text-purple-500',valColor: 'text-purple-700',
+            tagClass: 'bg-purple-100 text-purple-800',thColor: 'text-purple-600', footColor: 'text-purple-700',
+            chartColor: 'rgba(167,139,250,0.85)' },
+        ],
+        count(text) {
+          let syllable=0, jamo=0;
+          for (const ch of text) {
+            const cp = ch.codePointAt(0);
+            if      (cp>=0xAC00 && cp<=0xD7A3) syllable++;
+            else if ((cp>=0x1100 && cp<=0x11FF)||(cp>=0x3130 && cp<=0x318F)||
+                     (cp>=0xA960 && cp<=0xA97F)||(cp>=0xD7B0 && cp<=0xD7FF)) jamo++;
+          }
+          return { syllable, jamo, total: syllable+jamo };
+        },
+        csvHeaders: (cats) => ['file name', ...cats.map(c=>c.label), 'count', 'estimate', 'price(₩) / character'],
+        csvRow:     (name, c, cats, price, fmt) => [name, ...cats.map(cat=>c[cat.key]), c.total, `₩${fmt(c.total*price)}`, ''],
+        csvTotal:   (sums, cats, price, fmt) => ['', ...cats.map(()=>''), 'total', `₩${fmt(sums.total*price)}`, ''],
+      },
+
+      vietnamese: {
+        label: 'Vietnamese', flag: '🇻🇳',
+        unit: 'char', unitLabel: 'chars', priceLabel: 'Price per character:', priceSuffix: '/ char',
+        categories: [
+          { key: 'letters',    label: 'Letters (ASCII)',
+            cardBg: 'bg-blue-50',  cardBorder: 'border-blue-100', labelColor: 'text-blue-500', valColor: 'text-blue-700',
+            tagClass: 'bg-blue-100 text-blue-800',  thColor: 'text-blue-600',  footColor: 'text-blue-700',
+            chartColor: 'rgba(96,165,250,0.85)' },
+          { key: 'diacritics', label: 'Diacritics',
+            cardBg: 'bg-green-50', cardBorder: 'border-green-100',labelColor: 'text-green-500',valColor: 'text-green-700',
+            tagClass: 'bg-green-100 text-green-800', thColor: 'text-green-600', footColor: 'text-green-700',
+            chartColor: 'rgba(74,222,128,0.85)' },
+          { key: 'numbers',    label: 'Numbers',
+            cardBg: 'bg-amber-50', cardBorder: 'border-amber-100',labelColor: 'text-amber-500',valColor: 'text-amber-700',
+            tagClass: 'bg-amber-100 text-amber-800', thColor: 'text-amber-600', footColor: 'text-amber-700',
+            chartColor: 'rgba(251,191,36,0.85)' },
+        ],
+        count(text) {
+          let letters=0, diacritics=0, numbers=0;
+          for (const ch of text) {
+            const cp = ch.codePointAt(0);
+            if      ((cp>=0x41&&cp<=0x5A)||(cp>=0x61&&cp<=0x7A)) letters++;
+            else if (cp>=0x30 && cp<=0x39) numbers++;
+            else if (cp>127 && /\p{L}/u.test(ch)) diacritics++;
+          }
+          return { letters, diacritics, numbers, total: letters+diacritics+numbers };
+        },
+        csvHeaders: (cats) => ['file name', ...cats.map(c=>c.label), 'count', 'estimate', 'price(₩) / character'],
+        csvRow:     (name, c, cats, price, fmt) => [name, ...cats.map(cat=>c[cat.key]), c.total, `₩${fmt(c.total*price)}`, ''],
+        csvTotal:   (sums, cats, price, fmt) => ['', ...cats.map(()=>''), 'total', `₩${fmt(sums.total*price)}`, ''],
+      },
+
+      english: {
+        label: 'English', flag: '🇺🇸',
+        unit: 'word', unitLabel: 'words', priceLabel: 'Price per word:', priceSuffix: '/ word',
+        categories: [
+          { key: 'words', label: 'Words',
+            cardBg: 'bg-blue-50',  cardBorder: 'border-blue-100',  labelColor: 'text-blue-500',  valColor: 'text-blue-700',
+            tagClass: 'bg-blue-100 text-blue-800',  thColor: 'text-blue-600',  footColor: 'text-blue-700',
+            chartColor: 'rgba(96,165,250,0.85)' },
+          { key: 'chars', label: 'Chars (excl. spaces)',
+            cardBg: 'bg-slate-50', cardBorder: 'border-slate-100', labelColor: 'text-slate-500', valColor: 'text-slate-700',
+            tagClass: 'bg-slate-100 text-slate-800', thColor: 'text-slate-600', footColor: 'text-slate-700',
+            chartColor: 'rgba(148,163,184,0.85)' },
+        ],
+        count(text) {
+          const words = (text.match(/\p{L}+/gu) || []).length;
+          const chars = (text.match(/\S/g) || []).length;
+          return { words, chars, total: words };
+        },
+        csvHeaders: (cats) => ['file name', 'Words', 'Chars (excl. spaces)', 'estimate', 'price(₩) / word'],
+        csvRow:     (name, c, cats, price, fmt) => [name, c.words, c.chars, `₩${fmt(c.total*price)}`, ''],
+        csvTotal:   (sums, cats, price, fmt) => ['', 'total', '', `₩${fmt(sums.total*price)}`, ''],
+      },
+    };
+
+    // ─── State ────────────────────────────────────────────────────────────────
+    let currentLang = 'japanese';
+    let files = [];   // [{ name, text, counts }]  — text stored for recount on lang switch
+    let chart = null;
+
+    // ─── Language switching ───────────────────────────────────────────────────
+    function setLang(lang) {
+      if (lang === currentLang) return;
+      currentLang = lang;
+
+      // Update tab styling
+      document.querySelectorAll('.lang-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.lang === lang);
+      });
+
+      // Update price label / suffix
+      const cfg = LANG_CONFIG[lang];
+      document.getElementById('price-label').textContent  = cfg.priceLabel;
+      document.getElementById('price-unit-suffix').textContent = cfg.priceSuffix;
+
+      // Recount all loaded files with new language logic
+      files.forEach(f => { f.counts = cfg.count(f.text); });
+
+      if (files.length > 0) render();
+    }
+
+    // ─── File reading ─────────────────────────────────────────────────────────
+    function readFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          const text   = e.target.result;
+          const counts = LANG_CONFIG[currentLang].count(text);
+          resolve({ name: file.name, text, counts });
+        };
+        reader.onerror = () => reject(new Error(`Failed to read: ${file.name}`));
+        reader.readAsText(file, 'utf-8');
+      });
+    }
+
+    async function addFiles(fileList) {
+      const newFiles = Array.from(fileList).filter(f =>
+        f.name.match(/\.(md|txt)$/i) && !files.some(x => x.name === f.name)
+      );
+      if (newFiles.length === 0) return;
+      const results = await Promise.all(newFiles.map(readFile));
+      files.push(...results);
+      render();
+    }
+
+    // ─── Rendering ────────────────────────────────────────────────────────────
+    function getPrice() {
+      return Math.max(1, parseInt(document.getElementById('price-input').value, 10) || 35);
+    }
+    function fmt(n) { return n.toLocaleString('ko-KR'); }
+    function escHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function nameWithoutExt(name) { return name.replace(/\.[^.]+$/, ''); }
+
+    function render() {
+      const cfg   = LANG_CONFIG[currentLang];
+      const cats  = cfg.categories;
+      const price = getPrice();
+
+      document.getElementById('results-section').classList.remove('hidden');
+      document.getElementById('file-count').textContent = files.length;
+
+      // Compute sums
+      const sums = { total: 0 };
+      cats.forEach(cat => { sums[cat.key] = 0; });
+      files.forEach(f => {
+        sums.total += f.counts.total;
+        cats.forEach(cat => { sums[cat.key] += f.counts[cat.key]; });
+      });
+
+      // ── Summary cards ──────────────────────────────────────────────────────
+      const cardsEl = document.getElementById('summary-cards');
+      cardsEl.innerHTML = `
+        <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total ${cfg.unit === 'word' ? 'Words' : 'Characters'}</p>
+          <p class="text-2xl font-bold text-gray-900 mt-1">${fmt(sums.total)}</p>
+        </div>
+        ${cats.map(cat => `
+          <div class="${cat.cardBg} rounded-xl border ${cat.cardBorder} p-4 shadow-sm">
+            <p class="text-xs font-medium ${cat.labelColor} uppercase tracking-wide">${cat.label}</p>
+            <p class="text-2xl font-bold ${cat.valColor} mt-1">${fmt(sums[cat.key])}</p>
+          </div>
+        `).join('')}
+      `;
+
+      // ── Estimate banner ────────────────────────────────────────────────────
+      document.getElementById('sum-estimate').textContent    = '₩' + fmt(sums.total * price);
+      document.getElementById('sum-total-banner').textContent = fmt(sums.total);
+      document.getElementById('banner-unit-label').textContent = cfg.unitLabel;
+      document.getElementById('price-display').textContent   = fmt(price);
+      document.getElementById('banner-unit-price').textContent = `₩/${cfg.unit}`;
+
+      // ── Table header ───────────────────────────────────────────────────────
+      document.getElementById('table-head').innerHTML = `
+        <tr class="bg-gray-50 border-b border-gray-200">
+          <th class="text-left px-5 py-3 font-semibold text-gray-600 w-8">#</th>
+          <th class="text-left px-5 py-3 font-semibold text-gray-600">File Name</th>
+          ${cats.map(cat => `<th class="text-right px-5 py-3 font-semibold ${cat.thColor}">${cat.label}</th>`).join('')}
+          <th class="text-right px-5 py-3 font-semibold text-gray-700">Total</th>
+          <th class="text-right px-5 py-3 font-semibold text-indigo-700">Estimate (₩)</th>
+          <th class="w-8"></th>
+        </tr>
+      `;
+
+      // ── Table body ─────────────────────────────────────────────────────────
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = '';
+      files.forEach((f, i) => {
+        const c   = f.counts;
+        const est = c.total * price;
+        const tr  = document.createElement('tr');
+        tr.className = 'table-row border-b border-gray-100';
+        tr.innerHTML = `
+          <td class="px-5 py-3 text-gray-400 text-xs">${i + 1}</td>
+          <td class="px-5 py-3 text-gray-800 font-medium max-w-xs truncate" title="${escHtml(f.name)}">${escHtml(nameWithoutExt(f.name))}</td>
+          ${cats.map(cat => `
+            <td class="px-5 py-3 text-right">
+              <span class="${cat.tagClass} text-xs font-medium px-2 py-0.5 rounded">${fmt(c[cat.key])}</span>
+            </td>
+          `).join('')}
+          <td class="px-5 py-3 text-right font-semibold text-gray-800">${fmt(c.total)}</td>
+          <td class="px-5 py-3 text-right font-semibold text-indigo-700">₩${fmt(est)}</td>
+          <td class="px-5 py-3 text-center">
+            <button onclick="removeFile(${i})" class="text-gray-300 hover:text-red-400 transition-colors" title="Remove">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // ── Table footer ───────────────────────────────────────────────────────
+      document.getElementById('table-foot').innerHTML = `
+        <tr class="bg-gray-50 border-t-2 border-gray-300 font-bold">
+          <td class="px-5 py-3"></td>
+          <td class="px-5 py-3 text-gray-500 text-xs uppercase tracking-wide">Total</td>
+          ${cats.map(cat => `<td class="px-5 py-3 text-right ${cat.footColor}">${fmt(sums[cat.key])}</td>`).join('')}
+          <td class="px-5 py-3 text-right text-gray-900">${fmt(sums.total)}</td>
+          <td class="px-5 py-3 text-right text-indigo-700">₩${fmt(sums.total * price)}</td>
+          <td class="px-5 py-3"></td>
+        </tr>
+      `;
+
+      renderChart(cfg, cats, sums);
+    }
+
+    // ─── Chart ────────────────────────────────────────────────────────────────
+    function renderChart(cfg, cats, sums) {
+      const labels   = files.map(f => nameWithoutExt(f.name));
+      const isStacked = cfg.unit !== 'word';  // stack char-based langs; group word-based
+
+      if (chart) chart.destroy();
+      const ctx = document.getElementById('bar-chart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: cats.map(cat => ({
+            label: cat.label,
+            data: files.map(f => f.counts[cat.key]),
+            backgroundColor: cat.chartColor,
+            borderRadius: 4,
+          })),
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { stacked: isStacked, grid: { display: false }, ticks: { font: { size: 11 } } },
+            y: { stacked: isStacked, grid: { color: '#f1f5f9' }, ticks: { font: { size: 11 } } },
+          },
+        },
+      });
+
+      // Chart legend
+      document.getElementById('chart-legend').innerHTML = cats.map(cat => `
+        <span class="flex items-center gap-1.5 text-gray-600">
+          <span class="w-3 h-3 rounded-sm inline-block" style="background:${cat.chartColor}"></span>
+          ${cat.label}
+        </span>
+      `).join('');
+    }
+
+    // ─── CSV Export ───────────────────────────────────────────────────────────
+    function exportCSV() {
+      if (files.length === 0) return;
+      const cfg   = LANG_CONFIG[currentLang];
+      const cats  = cfg.categories;
+      const price = getPrice();
+
+      const sums = { total: 0 };
+      cats.forEach(cat => { sums[cat.key] = 0; });
+
+      const rows = [cfg.csvHeaders(cats)];
+      files.forEach(f => {
+        const c = f.counts;
+        sums.total += c.total;
+        cats.forEach(cat => { sums[cat.key] += c[cat.key]; });
+        rows.push(cfg.csvRow(nameWithoutExt(f.name), c, cats, price, fmt));
+      });
+      rows.push(cfg.csvTotal(sums, cats, price, fmt));
+
+      const csv = rows.map(r => r.map(cell => {
+        const s = String(cell);
+        return s.includes(',') || s.includes('"') || s.includes('\n')
+          ? `"${s.replace(/"/g, '""')}"` : s;
+      }).join(',')).join('\r\n');
+
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `character_count_estimate_${currentLang}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ─── Helpers ─────────────────────────────────────────────────────────────
+    function removeFile(i) {
+      files.splice(i, 1);
+      if (files.length === 0) { clearAll(); return; }
+      render();
+    }
+
+    function clearAll() {
+      files = [];
+      if (chart) { chart.destroy(); chart = null; }
+      document.getElementById('results-section').classList.add('hidden');
+      document.getElementById('file-input').value = '';
+    }
+
+    // ─── Event listeners ──────────────────────────────────────────────────────
+    document.getElementById('file-input').addEventListener('change', e => addFiles(e.target.files));
+    document.getElementById('price-input').addEventListener('input', () => { if (files.length) render(); });
+
+    const dz = document.getElementById('drop-zone');
+    dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drop-active'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drop-active'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('drop-active');
+      addFiles(e.dataTransfer.files);
+    });
+  </script>
+</body>
+</html>
